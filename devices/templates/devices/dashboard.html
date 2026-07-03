@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Office Monitor Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #f4f6f9; }
+        .device-card { border-radius: 10px; transition: all 0.3s; }
+        .device-on { background: #d4edda; border: 2px solid #28a745; }
+        .device-off { background: #e9ecef; border: 2px solid #adb5bd; opacity: 0.7; }
+        .status-dot { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .dot-on { background: #28a745; box-shadow: 0 0 8px #28a745; }
+        .dot-off { background: #6c757d; }
+        .alert-item { border-left: 4px solid #dc3545; }
+    </style>
+</head>
+<body>
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>🏢 Office Monitor</h2>
+        <span class="text-muted" id="lastUpdated">Loading...</span>
+    </div>
+
+    <!-- Power Meter -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted">TOTAL POWER RIGHT NOW</h6>
+                    <h1 class="display-4 fw-bold text-primary" id="totalWatts">--</h1>
+                    <span class="text-muted">Watts</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted">PER-ROOM BREAKDOWN (W)</h6>
+                    <canvas id="roomChart" height="80"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Device Panels -->
+    <div class="row mb-4" id="roomsContainer"></div>
+
+    <!-- Alerts -->
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5>⚠️ Active Alerts</h5>
+            <div id="alertsContainer"><p class="text-muted">No active alerts</p></div>
+        </div>
+    </div>
+</div>
+
+<script>
+const FAKE_MODE = true;   // ← API ready hole false koro
+
+const ROOM_NAMES = { drawing: "Drawing Room", work1: "Work Room 1", work2: "Work Room 2" };
+
+// ---------- FAKE DATA (API asar age test korar jonno) ----------
+function fakeDevices() {
+    const devices = [];
+    for (const room of ["drawing", "work1", "work2"]) {
+        for (let i = 1; i <= 2; i++)
+            devices.push({ name: `Fan ${i}`, room: room, is_on: Math.random() > 0.5, wattage: 60, last_changed: new Date().toISOString() });
+        for (let i = 1; i <= 3; i++)
+            devices.push({ name: `Light ${i}`, room: room, is_on: Math.random() > 0.5, wattage: 15, last_changed: new Date().toISOString() });
+    }
+    return devices;
+}
+function fakeAlerts() {
+    return [{ message: "Work Room 2: all devices ON for over 2 hours", timestamp: new Date().toISOString() }];
+}
+
+// ---------- DATA FETCH ----------
+async function getDevices() {
+    if (FAKE_MODE) return fakeDevices();
+    const res = await fetch('/api/devices/');
+    return await res.json();
+}
+async function getAlerts() {
+    if (FAKE_MODE) return fakeAlerts();
+    const res = await fetch('/api/alerts/');
+    return await res.json();
+}
+
+// ---------- CHART ----------
+let roomChart = null;
+function drawChart(roomWatts) {
+    const labels = Object.keys(roomWatts).map(r => ROOM_NAMES[r]);
+    const values = Object.values(roomWatts);
+    if (roomChart) {
+        roomChart.data.datasets[0].data = values;
+        roomChart.update();
+        return;
+    }
+    roomChart = new Chart(document.getElementById('roomChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{ label: 'Watts', data: values, backgroundColor: ['#0d6efd', '#198754', '#fd7e14'] }]
+        },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+}
+
+// ---------- RENDER ----------
+function render(devices, alerts) {
+    // Room-wise group
+    const rooms = { drawing: [], work1: [], work2: [] };
+    devices.forEach(d => rooms[d.room].push(d));
+
+    // Device cards
+    let html = "";
+    let totalWatts = 0;
+    const roomWatts = {};
+    for (const [key, devs] of Object.entries(rooms)) {
+        let roomTotal = 0;
+        let cards = devs.map(d => {
+            if (d.is_on) { roomTotal += d.wattage; }
+            const icon = d.name.includes("Fan") ? "🌀" : "💡";
+            return `
+            <div class="device-card p-2 mb-2 ${d.is_on ? 'device-on' : 'device-off'}">
+                <span class="status-dot ${d.is_on ? 'dot-on' : 'dot-off'}"></span>
+                ${icon} <strong>${d.name}</strong>
+                <span class="float-end">${d.is_on ? d.wattage + 'W' : 'OFF'}</span>
+            </div>`;
+        }).join("");
+        totalWatts += roomTotal;
+        roomWatts[key] = roomTotal;
+        html += `
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header fw-bold d-flex justify-content-between">
+                    ${ROOM_NAMES[key]} <span class="badge bg-primary">${roomTotal}W</span>
+                </div>
+                <div class="card-body">${cards}</div>
+            </div>
+        </div>`;
+    }
+    document.getElementById('roomsContainer').innerHTML = html;
+    document.getElementById('totalWatts').textContent = totalWatts;
+    drawChart(roomWatts);
+
+    // Alerts
+    const alertBox = document.getElementById('alertsContainer');
+    if (alerts.length === 0) {
+        alertBox.innerHTML = '<p class="text-muted">No active alerts ✅</p>';
+    } else {
+        alertBox.innerHTML = alerts.map(a => `
+            <div class="alert-item bg-light p-2 mb-2 rounded">
+                ${a.message}
+                <small class="text-muted float-end">${new Date(a.timestamp).toLocaleTimeString()}</small>
+            </div>`).join("");
+    }
+
+    document.getElementById('lastUpdated').textContent = "Updated: " + new Date().toLocaleTimeString();
+}
+
+// ---------- POLLING (live update, no refresh) ----------
+async function update() {
+    try {
+        const [devices, alerts] = await Promise.all([getDevices(), getAlerts()]);
+        render(devices, alerts);
+    } catch (e) {
+        console.error("Fetch failed:", e);
+    }
+}
+update();
+setInterval(update, 3000);   // proti 3 second
+</script>
+</body>
+</html>
