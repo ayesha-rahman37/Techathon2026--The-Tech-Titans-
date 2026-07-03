@@ -75,3 +75,5 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = Alert.objects.filter(is_active=True)
     serializer_class = AlertSerializer
+def dashboard(request):
+    return render(request, 'devices/dashboard.html')
