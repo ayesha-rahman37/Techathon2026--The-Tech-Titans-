@@ -58,35 +58,31 @@
 </div>
 
 <script>
-const FAKE_MODE = true;   // ← API ready hole false koro
+const ROOM_NAMES = { drawing_room: "Drawing Room", work_room_1: "Work Room 1", work_room_2: "Work Room 2" };
 
-const ROOM_NAMES = { drawing: "Drawing Room", work1: "Work Room 1", work2: "Work Room 2" };
-
-// ---------- FAKE DATA (API asar age test korar jonno) ----------
-function fakeDevices() {
-    const devices = [];
-    for (const room of ["drawing", "work1", "work2"]) {
-        for (let i = 1; i <= 2; i++)
-            devices.push({ name: `Fan ${i}`, room: room, is_on: Math.random() > 0.5, wattage: 60, last_changed: new Date().toISOString() });
-        for (let i = 1; i <= 3; i++)
-            devices.push({ name: `Light ${i}`, room: room, is_on: Math.random() > 0.5, wattage: 15, last_changed: new Date().toISOString() });
-    }
-    return devices;
-}
-function fakeAlerts() {
-    return [{ message: "Work Room 2: all devices ON for over 2 hours", timestamp: new Date().toISOString() }];
-}
-
-// ---------- DATA FETCH ----------
+// ---------- DATA FETCH (real backend API) ----------
 async function getDevices() {
-    if (FAKE_MODE) return fakeDevices();
     const res = await fetch('/api/devices/');
-    return await res.json();
+    const data = await res.json();
+    // API field names -> dashboard format
+    return data.map(d => ({
+        name: d.name,
+        room: d.room_slug,
+        is_on: d.status,
+        wattage: d.power_watt,
+        last_changed: d.last_changed
+    }));
 }
+
 async function getAlerts() {
-    if (FAKE_MODE) return fakeAlerts();
     const res = await fetch('/api/alerts/');
-    return await res.json();
+    const data = await res.json();
+    return data.map(a => ({ message: a.message, timestamp: a.created_at }));
+}
+
+async function getOfficePower() {
+    const res = await fetch('/api/rooms/office_power/');
+    return await res.json();   // {total_power_watt, per_room, estimated_daily_usage_kwh}
 }
 
 // ---------- CHART ----------
@@ -110,14 +106,12 @@ function drawChart(roomWatts) {
 }
 
 // ---------- RENDER ----------
-function render(devices, alerts) {
+function render(devices, alerts, officePower) {
     // Room-wise group
-    const rooms = { drawing: [], work1: [], work2: [] };
-    devices.forEach(d => rooms[d.room].push(d));
+    const rooms = { drawing_room: [], work_room_1: [], work_room_2: [] };
+    devices.forEach(d => { if (rooms[d.room]) rooms[d.room].push(d); });
 
-    // Device cards
     let html = "";
-    let totalWatts = 0;
     const roomWatts = {};
     for (const [key, devs] of Object.entries(rooms)) {
         let roomTotal = 0;
@@ -131,7 +125,6 @@ function render(devices, alerts) {
                 <span class="float-end">${d.is_on ? d.wattage + 'W' : 'OFF'}</span>
             </div>`;
         }).join("");
-        totalWatts += roomTotal;
         roomWatts[key] = roomTotal;
         html += `
         <div class="col-md-4">
@@ -144,8 +137,12 @@ function render(devices, alerts) {
         </div>`;
     }
     document.getElementById('roomsContainer').innerHTML = html;
-    document.getElementById('totalWatts').textContent = totalWatts;
     drawChart(roomWatts);
+
+    // Total power + estimated kWh (backend office_power endpoint theke)
+    document.getElementById('totalWatts').innerHTML =
+        officePower.total_power_watt +
+        `<div class="fs-6 text-muted fw-normal">≈ ${officePower.estimated_daily_usage_kwh} kWh/day</div>`;
 
     // Alerts
     const alertBox = document.getElementById('alertsContainer');
@@ -162,17 +159,18 @@ function render(devices, alerts) {
     document.getElementById('lastUpdated').textContent = "Updated: " + new Date().toLocaleTimeString();
 }
 
-// ---------- POLLING (live update, no refresh) ----------
+// ---------- POLLING (live update, no page refresh) ----------
 async function update() {
     try {
-        const [devices, alerts] = await Promise.all([getDevices(), getAlerts()]);
-        render(devices, alerts);
+        const [devices, alerts, officePower] = await Promise.all([getDevices(), getAlerts(), getOfficePower()]);
+        render(devices, alerts, officePower);
     } catch (e) {
         console.error("Fetch failed:", e);
     }
 }
 update();
-setInterval(update, 3000);   // proti 3 second
+setInterval(update, 3000);
 </script>
+
 </body>
 </html>
