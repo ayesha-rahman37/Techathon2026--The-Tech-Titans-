@@ -5,4 +5,10 @@ from devices.views import dashboard  # আপনার অ্যাপের ন
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('devices.urls')),  # এটি আপনার devices অ্যাপের urls.py কে যুক্ত করবে
+from devices import views
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('api/', include('devices.urls')),
+    path('', views.dashboard, name='dashboard'),
 ]
