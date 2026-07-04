@@ -134,7 +134,7 @@ Then open **http://127.0.0.1:8000/** for the dashboard, and type `!status` in th
 
 A representative circuit for **one room** (ESP32 + 2 fans + 3 lights) showing how device on/off states would be sensed in real life: each device's switch state is read on an ESP32 GPIO input, and an LED per device mirrors the sensed state. In production the ESP32 would report state changes to the backend over WiFi — in this project that role is played by the simulator.
 
-📷 See `diagrams/wokwi_circuit.png` · 🔗 Live simulation: *(Wokwi project link here)*
+📷 See `diagrams/wokwi_circuit.png` · 🔗 Live simulation: https://wokwi.com/projects/468602846330242049
 
 ## 📁 Project Structure
 
