@@ -28,12 +28,12 @@ class Command(BaseCommand):
 
             is_after_hours = current_hour < 9 or current_hour >= 17
 
-            # 2. Alert checks — একবার প্রতি room-এর জন্য, প্রতি device-এর জন্য না
+            # 2. Alert checks — once per room, not per device
             for room in Room.objects.all():
                 room_devices = list(room.devices.all())
                 active_devices = [d for d in room_devices if d.status]
 
-                # Scenario A: after-hours-এ কোনো ডিভাইস ON
+                # Scenario A: any device ON after office hours
                 if is_after_hours and active_devices:
                     exists = Alert.objects.filter(
                         room=room, message__startswith="After-hours:", is_active=True
@@ -43,12 +43,12 @@ class Command(BaseCommand):
                         Alert.objects.create(room=room, message=msg)
                         self.stdout.write(self.style.ERROR(f"ALERT: {msg}"))
                 else:
-                    # office hours ফিরে এলে বা সব off হলে auto-resolve
+                    # auto-resolve when office hours return or all devices are off
                     Alert.objects.filter(
                         room=room, message__startswith="After-hours:", is_active=True
                     ).update(is_active=False)
 
-                # Scenario B: সব ডিভাইস >2 ঘণ্টা ধরে টানা ON
+                # Scenario B: all devices continuously ON for more than 2 hours
                 if room_devices and all(d.status for d in room_devices):
                     oldest_change = min(d.last_changed for d in room_devices)
                     duration = (current_time - oldest_change).total_seconds()

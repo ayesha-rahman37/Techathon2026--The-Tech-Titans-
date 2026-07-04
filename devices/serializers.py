@@ -24,12 +24,12 @@ class RoomSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'slug', 'devices', 'total_power_draw']
 
     def get_total_power_draw(self, obj):
-        # এই রুমের অন থাকা সব ডিভাইসের পাওয়ার যোগফল
+        # total power of all devices currently ON in this room
         return sum(device.current_power_draw for device in obj.devices.all())
 
 
 class DeviceLogSerializer(serializers.ModelSerializer):
-    """ডিভাইসের অন/অফ হিস্ট্রি ফ্রন্টএন্ড বা বটে দেখানোর জন্য নতুন সিরিয়ালাইজার"""
+    """Serializer for showing device on/off history in the frontend or bot"""
     device_name = serializers.CharField(source='device.name', read_only=True)
 
     class Meta:
@@ -39,7 +39,7 @@ class DeviceLogSerializer(serializers.ModelSerializer):
 
 class AlertSerializer(serializers.ModelSerializer):
     room_name = serializers.SerializerMethodField()
-    device_name = serializers.CharField(source='device.name', read_only=True) # নতুন ফিল্ড যুক্ত করা হলো
+    device_name = serializers.CharField(source='device.name', read_only=True) # added field
 
     class Meta:
         model = Alert

@@ -19,8 +19,8 @@ class Device(models.Model):
 
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='devices')
     device_type = models.CharField(max_length=10, choices=DEVICE_TYPES)
-    name = models.CharField(max_length=50) # যেমন: "Fan 1", "Light 3"
-    power_watt = models.PositiveIntegerField() # যেমন: ফ্যানের জন্য 60, লাইটের জন্য 15
+    name = models.CharField(max_length=50) # e.g. "Fan 1", "Light 3"
+    power_watt = models.PositiveIntegerField() # e.g. 60 for a fan, 15 for a light
     status = models.BooleanField(default=False) # True = ON, False = OFF
     last_changed = models.DateTimeField(default=timezone.now)
 
@@ -28,13 +28,13 @@ class Device(models.Model):
         return f"{self.room.name} - {self.name}"
 
     def set_status(self, new_status: bool):
-        """ডিভাইসের স্টেট পরিবর্তন করার এবং লগ রাখার কাস্টম মেথড"""
+        """Custom method to change device state and keep a log"""
         if new_status != self.status:
             self.status = new_status
             self.last_changed = timezone.now()
             self.save()
             
-            # ডিভাইস অন/অফ হওয়ার হিস্ট্রি ট্র্যাক করার জন্য লগ তৈরি
+            # create a log entry to track device on/off history
             DeviceLog.objects.create(
                 device=self,
                 status=self.status,
@@ -43,12 +43,12 @@ class Device(models.Model):
 
     @property
     def current_power_draw(self):
-        """ডিভাইসটি বর্তমানে কত ওয়াট বিদ্যুৎ টানছে তা সরাসরি পাওয়ার প্রোপার্টি"""
+        """Property that returns how many watts the device is drawing right now"""
         return self.power_watt if self.status else 0
 
 
 class DeviceLog(models.Model):
-    """প্রতিবার ডিভাইস অন/অফ হলে তার হিস্ট্রি রাখার জন্য মডেল"""
+    """Model that keeps history every time a device turns on/off"""
     device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name='logs')
     status = models.BooleanField()
     timestamp = models.DateTimeField(default=timezone.now)
@@ -62,9 +62,9 @@ class DeviceLog(models.Model):
 
 
 class Alert(models.Model):
-    """অফিস আওয়ারের বাইরে ডিভাইস অন থাকলে বা অ্যানোমালির জন্য অ্যালার্ট মডেল"""
+    """Alert model for devices left ON outside office hours or other anomalies"""
     room = models.ForeignKey(Room, on_delete=models.CASCADE, null=True, blank=True, related_name='alerts')
-    device = models.ForeignKey(Device, on_delete=models.CASCADE, null=True, blank=True, related_name='alerts') # নতুন ফিল্ড (ঐচ্ছিক)
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, null=True, blank=True, related_name='alerts') # optional field
     message = models.CharField(max_length=255)
     created_at = models.DateTimeField(default=timezone.now)
     is_active = models.BooleanField(default=True)

@@ -51,7 +51,7 @@ def friendly_reply(raw_data: str, instruction: str) -> str:
         )
         return response.choices[0].message.content
     except Exception as e:
-        # Groq fail korleo bot jeno data dite pare
+        # fallback: if Groq fails, the bot still returns the raw data
         return f"(AI unavailable, raw data) {raw_data}"
 
 
