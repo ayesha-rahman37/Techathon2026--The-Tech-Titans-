@@ -139,7 +139,7 @@ function render(devices, alerts, officePower) {
     document.getElementById('roomsContainer').innerHTML = html;
     drawChart(roomWatts);
 
-    // Total power + estimated kWh (backend office_power endpoint theke)
+    // Total power + estimated kWh (from the backend office_power endpoint)
     document.getElementById('totalWatts').innerHTML =
         officePower.total_power_watt +
         `<div class="fs-6 text-muted fw-normal">≈ ${officePower.estimated_daily_usage_kwh} kWh/day</div>`;
