@@ -2,13 +2,16 @@
 Office Monitor Discord Bot
 Fetches live device data from the Django backend API
 and replies in a friendly, humanized way using Groq LLM.
+
 Commands: !status, !room <name>, !usage
+Bonus:    free chat via @mention, proactive alert posts
 """
 
+import re
 import os
 import discord
 import requests
-from discord.ext import commands
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from groq import Groq
 
@@ -27,6 +30,9 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+ALERT_CHANNEL_ID = 1522853884316618832
+posted_alert_ids = set()
 
 
 def friendly_reply(raw_data: str, instruction: str) -> str:
@@ -50,15 +56,98 @@ def friendly_reply(raw_data: str, instruction: str) -> str:
             max_tokens=200,
         )
         return response.choices[0].message.content
-    except Exception as e:
-        # Groq fail korleo bot jeno data dite pare
+    except Exception:
+        # fallback: if Groq fails, the bot still returns the raw data
         return f"(AI unavailable, raw data) {raw_data}"
+
+
+def is_bot_mentioned(message: discord.Message) -> bool:
+    """True if the bot was mentioned directly OR via its integration role.
+
+    Discord often converts @BotName into a ROLE mention (the bot's
+    auto-created role), which does not appear in message.mentions —
+    so we check role mentions too.
+    """
+    if bot.user in message.mentions:
+        return True
+    if message.guild:
+        for role in message.role_mentions:
+            if role in message.guild.me.roles:
+                return True
+    return False
+
+
+# ---------------- Bonus: proactive alert posting ----------------
+
+@tasks.loop(seconds=30)
+async def alert_watcher():
+    """PDF Bonus: proactively posts to Discord when an alert triggers."""
+    try:
+        alerts = requests.get(f"{API_BASE}/alerts/", timeout=10).json()
+        channel = bot.get_channel(ALERT_CHANNEL_ID)
+        if channel is None:
+            return
+        for a in alerts:
+            if a["id"] not in posted_alert_ids:
+                posted_alert_ids.add(a["id"])
+                reply = friendly_reply(
+                    a["message"],
+                    "Post a short, friendly heads-up to the office Discord "
+                    "channel about this alert. Sound a little concerned but casual."
+                )
+                await channel.send(f"⚠️ {reply}")
+    except Exception as e:
+        print("Alert watcher error:", e)
 
 
 @bot.event
 async def on_ready():
     print(f"✅ Bot logged in as {bot.user}")
+    if not alert_watcher.is_running():
+        alert_watcher.start()
 
+
+# ---------------- Bonus: free chat via @mention ----------------
+
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+
+    if message.content.startswith("!"):
+        await bot.process_commands(message)
+        return
+
+    if is_bot_mentioned(message):
+        print(f"[free-chat] Question from {message.author}: {message.content}")
+        try:
+            rooms = requests.get(f"{API_BASE}/rooms/", timeout=10).json()
+            power = requests.get(f"{API_BASE}/rooms/office_power/", timeout=10).json()
+
+            # Remove all mention tags (<@id>, <@!id>, <@&roleid>) from the question
+            question = re.sub(r"<@[!&]?\d+>", "", message.content).strip()
+
+            # Keep the data small — enough for Groq to answer well
+            slim = [
+                {
+                    "room": r["name"],
+                    "devices": [{"name": d["name"], "on": d["status"]} for d in r["devices"]],
+                    "power_watt": r["total_power_draw"],
+                }
+                for r in rooms
+            ]
+            raw = f"Rooms: {slim}. Office summary: {power}"
+            reply = friendly_reply(
+                raw,
+                f"The boss asked: '{question}'. Answer conversationally using ONLY this live office data."
+            )
+            await message.channel.send(reply)
+        except Exception as e:
+            print(f"[free-chat] ERROR: {e}")
+            await message.channel.send("⚠️ Something went wrong while checking the office — try again?")
+
+
+# ---------------- Required commands ----------------
 
 @bot.command()
 async def status(ctx):
